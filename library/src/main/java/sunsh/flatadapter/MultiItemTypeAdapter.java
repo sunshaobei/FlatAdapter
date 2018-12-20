@@ -4,11 +4,13 @@ import android.content.Context;
 import android.support.v4.util.SparseArrayCompat;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+
 
 import java.util.List;
 
@@ -16,15 +18,18 @@ import sunsh.flatadapter.base.ItemViewDelegate;
 import sunsh.flatadapter.base.ItemViewDelegateManager;
 import sunsh.flatadapter.base.ViewHolder;
 
+
 /**
  * Created by sunsh on 18/5/30.
  */
 public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
     private static final int BASE_ITEM_TYPE_HEADER = 100000;
     private static final int BASE_ITEM_TYPE_FOOTER = 200000;
+    private int autoIncrementing;
+    private int decrementing;
 
-    private SparseArrayCompat<Object> mHeaderViews;
-    private SparseArrayCompat<Object> mFootViews;
+    private SparseArrayCompat<View> mHeaderViews;
+    private SparseArrayCompat<View> mFootViews;
 
 
     protected Context mContext;
@@ -32,12 +37,12 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
 
     protected ItemViewDelegateManager mItemViewDelegateManager;
     protected OnItemClickListener mOnItemClickListener;
-    private OnItemLongClickListener onItemLongClickListener;
-    private LoadingType loadingType = LoadingType.HIDE;
+    protected OnItemLongClickListener mOnItemLongClickListener;
     private View emptyView;
     private LoadingView loadingView;
     private OnLoadingListener onLoadingListener;
     private boolean loadingComplete = true;
+    private boolean enableLoading = false;
 
     public MultiItemTypeAdapter(Context context, List<T> datas) {
         mContext = context;
@@ -103,17 +108,16 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
         viewHolder.getConvertView().setOnClickListener(v -> {
             if (mOnItemClickListener != null) {
                 int position = viewHolder.getAdapterPosition();
-                if (!isHeaderViewPos(position) && !isFooterViewPos(position)) {
-                    mOnItemClickListener.onItemClick(v, viewHolder, position, position - getHeadersCount());
-                }
+                if (position < mDatas.size())
+                    mOnItemClickListener.onItemClick(v, viewHolder, position,position-getHeadersCount());
             }
         });
 
         viewHolder.getConvertView().setOnLongClickListener(v -> {
-            if (mOnItemClickListener != null) {
+            if (mOnItemLongClickListener != null) {
                 int position = viewHolder.getAdapterPosition();
                 if (position < mDatas.size())
-                    return onItemLongClickListener.onItemLongClick(v, viewHolder, position, position - getHeadersCount());
+                    return mOnItemLongClickListener.onItemLongClick(v, viewHolder, position,position-getHeadersCount());
             }
             return false;
         });
@@ -126,7 +130,7 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
             if (isFooterViewPos(position)) {
                 int key = mFootViews.keyAt(position - getHeadersCount() - getDataItemCount());
                 Object o = mFootViews.get(key);
-                if (o != null && o.equals(getLoadingView().getView()) && loadingComplete&&loadingType.equals(LoadingType.LOADING)) {
+                if (o != null && o.equals(getLoadingView().getView()) && loadingComplete && getLoadingView().getLoadingType().equals(LoadingType.LOADING)) {
                     getLoadingView().getView().postDelayed(() -> {
                         loadingComplete = false;
                         onLoadingListener.onLoading(getHeadersCount() + getDataItemCount());
@@ -148,21 +152,23 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
         int itemCount = mDatas.size();
         if (itemCount == 0) {
             if (emptyView != null) {
-                if (loadingType.equals(LoadingType.HIDE)) {
-                    addFootView(emptyView);
-                } else {
-                    removeFootView(emptyView);
-                }
+//                if (!enableLoading || getLoadingView().getLoadingType().equals(LoadingType.ERROR)) {
+//                    addFootView(emptyView);
+//                } else {
+//                    removeFootView(emptyView);
+//                }
+                addFootView(emptyView);
             }
         } else {
             if (emptyView != null) removeFootView(emptyView);
+            if (enableLoading && !getLoadingView().getLoadingType().equals(LoadingType.ERROR)) {
+                addLoadingView();
+            } else {
+                removeLoadingView();
+            }
         }
 
-        if (!loadingType.equals(LoadingType.HIDE)) {
-            addLoadingView();
-        } else {
-            removeLoadingView();
-        }
+
         return itemCount + getHeadersCount() + getFootersCount();
     }
 
@@ -174,9 +180,8 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
 
     public void setLoadingComplete(boolean noMore) {
         this.loadingComplete = true;
-        if (noMore){
-            this.loadingType=LoadingType.NO_MORE;
-            getLoadingView().setLoadingType(loadingType);
+        if (noMore) {
+            getLoadingView().setLoadingType(LoadingType.NO_MORE);
         }
     }
 
@@ -188,7 +193,8 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
     public void addHeaderView(View view) {
         if (mHeaderViews == null) mHeaderViews = new SparseArrayCompat<>();
         if (mHeaderViews.containsValue(view)) return;
-        mHeaderViews.put(mHeaderViews.size() + BASE_ITEM_TYPE_HEADER, view);
+        autoIncrementing++;
+        mHeaderViews.put(autoIncrementing + BASE_ITEM_TYPE_HEADER, view);
     }
 
 
@@ -212,7 +218,8 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
     public void addFootView(View view) {
         if (mFootViews == null) mFootViews = new SparseArrayCompat<>();
         if (mFootViews.containsValue(view)) return;
-        mFootViews.put(mFootViews.size() + BASE_ITEM_TYPE_FOOTER, view);
+        decrementing--;
+        mFootViews.put(decrementing + BASE_ITEM_TYPE_FOOTER, view);
     }
 
     public void removeFootView(View view) {
@@ -288,12 +295,12 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
     }
 
     public interface OnItemClickListener {
-        void onItemClick(View view, RecyclerView.ViewHolder holder, int realPosition, int dataPosition);
+        void onItemClick(View view, ViewHolder holder, int position,int dataPosition);
+    }
+    public interface OnItemLongClickListener {
+        boolean onItemLongClick(View view, RecyclerView.ViewHolder holder, int position,int dataPosition);
     }
 
-    public interface OnItemLongClickListener {
-        boolean onItemLongClick(View view, RecyclerView.ViewHolder holder, int position, int dataPosition);
-    }
 
     public interface OnLoadingListener {
         void onLoading(int lastPosition);
@@ -301,24 +308,37 @@ public class MultiItemTypeAdapter<T> extends RecyclerView.Adapter<ViewHolder> {
 
     public void setOnLoadingListener(OnLoadingListener o) {
         this.onLoadingListener = o;
-        this.loadingType = LoadingType.LOADING;
-        getLoadingView().setLoadingType(loadingType);
+        setEnableLoading(true);
+        getLoadingView().setLoadingType(LoadingType.LOADING);
+    }
+
+    public void setEnableLoading(boolean b) {
+        enableLoading = b;
+//        notifyDataSetChanged();
     }
 
     public void setOnItemClickListener(OnItemClickListener onItemClickListener) {
         this.mOnItemClickListener = onItemClickListener;
     }
 
-    public void setOnItemLongClickListener(OnItemLongClickListener onItemLongClickListener) {
-        this.onItemLongClickListener = onItemLongClickListener;
-    }
+//    public void setError() {
+//        getLoadingView().setLoadingType(LoadingType.ERROR);
+//        notifyDataSetChanged();
+//    }
+//
+//    public void resetLoading() {
+//        getLoadingView().setLoadingType(LoadingType.LOADING);
+//        notifyDataSetChanged();
+//    }
 
-    public void setEmptyView(String text, int resid, int width, int height) {
+    public void setEmptyView(String text, int resId, int width, int height) {
         emptyView = LayoutInflater.from(mContext).inflate(R.layout.rv_empty, null);
         TextView tv_empty = emptyView.findViewById(R.id.tv_empty);
         ImageView iv_empty = emptyView.findViewById(R.id.iv_empty);
-        tv_empty.setText(text);
-        iv_empty.setImageResource(resid);
+        if (!TextUtils.isEmpty(text))
+            tv_empty.setText(text);
+        if (resId > 0)
+            iv_empty.setImageResource(resId);
         ViewGroup.LayoutParams layoutParams = emptyView.getLayoutParams();
         if (layoutParams == null)
             layoutParams = new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
